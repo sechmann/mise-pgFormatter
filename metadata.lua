@@ -20,9 +20,4 @@ PLUGIN = { -- luacheck: ignore
 
     -- Optional: Minimum mise runtime version required
     minRuntimeVersion = "0.2.0",
-
-    -- Optional: Legacy version files this plugin can parse
-    -- legacyFilenames = {
-    --     ".pg_format-version",
-    -- }
 }
