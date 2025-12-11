@@ -14,12 +14,14 @@ function PLUGIN:PostInstall(ctx)
 
     -- pgFormatter is extracted from GitHub tarball
     -- The tarball extracts to a directory like darold-pgFormatter-<sha>/
+    -- This is GitHub's standard tarball extraction format: {owner}-{repo}-{sha}
     -- We need to find this directory and set up the structure
 
     -- Create bin directory
     os.execute("mkdir -p " .. shell_escape(path .. "/bin"))
 
     -- Find the extracted directory (will be darold-pgFormatter-*)
+    -- Note: This pattern is based on GitHub's standard tarball extraction format
     local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
     local handle = io.popen(find_cmd)
     local extracted_dir = handle:read("*l")
