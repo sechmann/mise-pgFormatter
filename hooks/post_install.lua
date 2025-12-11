@@ -8,6 +8,11 @@ local function shell_escape(arg)
     return "'" .. arg:gsub("'", "'\\''") .. "'"
 end
 
+-- Helper function to check if a file or directory exists
+local function path_exists(filepath)
+    return os.execute("test -e " .. shell_escape(filepath)) == 0
+end
+
 function PLUGIN:PostInstall(ctx)
     local sdkInfo = ctx.sdkInfo[PLUGIN.name]
     local path = sdkInfo.path
@@ -19,15 +24,15 @@ function PLUGIN:PostInstall(ctx)
     -- We need to handle both cases
 
     -- First, check if files are already in the root (mise stripped the wrapper)
-    local pg_format_in_root = os.execute("test -f " .. shell_escape(path .. "/pg_format"))
-    local lib_in_root = os.execute("test -d " .. shell_escape(path .. "/lib"))
+    local pg_format_in_root = path_exists(path .. "/pg_format")
+    local lib_in_root = path_exists(path .. "/lib")
 
     local source_dir = path
     local needs_cleanup = false
 
     -- If not in root, look for the wrapper directory
     -- Both files must be missing to search for wrapper (using AND logic)
-    if pg_format_in_root ~= 0 and lib_in_root ~= 0 then
+    if not pg_format_in_root and not lib_in_root then
         local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
         local handle = io.popen(find_cmd)
         local extracted_dir = handle:read("*l")
@@ -52,7 +57,7 @@ function PLUGIN:PostInstall(ctx)
     if source_dir ~= path then
         local move_result = os.execute("mv " .. shell_escape(source_dir .. "/pg_format") .. " " .. shell_escape(path .. "/bin/pg_format"))
         if move_result ~= 0 then
-            error("Failed to move pg_format script")
+            error("Failed to move pg_format script to bin")
         end
 
         -- Move lib directory (contains Perl modules needed by pg_format)
@@ -64,7 +69,7 @@ function PLUGIN:PostInstall(ctx)
         -- Files are already in root, just move pg_format to bin/
         local move_result = os.execute("mv " .. shell_escape(path .. "/pg_format") .. " " .. shell_escape(path .. "/bin/pg_format"))
         if move_result ~= 0 then
-            error("Failed to move pg_format script to bin/")
+            error("Failed to move pg_format script to bin")
         end
         -- lib is already in the right place
     end
