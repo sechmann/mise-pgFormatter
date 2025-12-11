@@ -16,41 +16,23 @@ end
 function PLUGIN:PostInstall(ctx)
     local sdkInfo = ctx.sdkInfo[PLUGIN.name]
     local path = sdkInfo.path
-    local version = sdkInfo.version
 
-    -- mise downloads the tarball but doesn't extract it automatically
-    -- The downloaded file is named "v{version}" based on the GitHub API tag reference
-    -- (e.g., "v5.8" for version 5.8, matching the tag format in pre_install.lua)
-    local tarball_path = path .. "/v" .. version
+    -- mise extracts the GitHub tarball automatically to the install path
+    -- The tarball extracts to a directory like darold-pgFormatter-<sha>
+    -- We need to find this directory and reorganize the files
 
-    -- Check if the tarball file exists and extract it
-    if path_exists(tarball_path) then
-        -- Extract the tarball
-        local extract_cmd = "tar -xzf " .. shell_escape(tarball_path) .. " -C " .. shell_escape(path)
-        local extract_result = os.execute(extract_cmd)
-        if extract_result ~= 0 then
-            error("Failed to extract tarball: " .. tarball_path)
-        end
+    -- First, check what's in the directory for debugging
+    local ls_handle = io.popen("ls -la " .. shell_escape(path))
+    local ls_output = ls_handle:read("*a")
+    ls_handle:close()
 
-        -- Remove the tarball after successful extraction
-        local rm_result = os.execute("rm " .. shell_escape(tarball_path))
-        if rm_result ~= 0 then
-            error("Failed to remove tarball after extraction: " .. tarball_path)
-        end
-    end
-
-    -- Now find the extracted directory
-    -- GitHub tarballs extract to a directory like darold-pgFormatter-<sha>
+    -- Find the extracted directory (darold-pgFormatter-*)
     local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
     local handle = io.popen(find_cmd)
     local extracted_dir = handle:read("*l")
     handle:close()
 
     if not extracted_dir or extracted_dir == "" then
-        -- Try to list what's actually in the directory for debugging
-        local ls_handle = io.popen("ls -la " .. shell_escape(path))
-        local ls_output = ls_handle:read("*a")
-        ls_handle:close()
         error("Failed to find extracted pgFormatter directory. Contents of " .. path .. ":\n" .. ls_output)
     end
 
