@@ -19,11 +19,11 @@ function PLUGIN:PostInstall(ctx)
     local version = ctx.version
 
     -- mise downloads the tarball but doesn't extract it automatically
-    -- The downloaded file is named after the version (e.g., "v5.8")
-    -- We need to extract it manually
+    -- The downloaded file is named "v{version}" based on the GitHub API tag reference
+    -- (e.g., "v5.8" for version 5.8, matching the tag format in pre_install.lua)
     local tarball_path = path .. "/v" .. version
 
-    -- Check if the tarball file exists
+    -- Check if the tarball file exists and extract it
     if path_exists(tarball_path) then
         -- Extract the tarball
         local extract_cmd = "tar -xzf " .. shell_escape(tarball_path) .. " -C " .. shell_escape(path)
@@ -32,8 +32,11 @@ function PLUGIN:PostInstall(ctx)
             error("Failed to extract tarball: " .. tarball_path)
         end
 
-        -- Remove the tarball after extraction
-        os.execute("rm " .. shell_escape(tarball_path))
+        -- Remove the tarball after successful extraction
+        local rm_result = os.execute("rm " .. shell_escape(tarball_path))
+        if rm_result ~= 0 then
+            error("Failed to remove tarball after extraction: " .. tarball_path)
+        end
     end
 
     -- Now find the extracted directory
@@ -52,7 +55,6 @@ function PLUGIN:PostInstall(ctx)
     end
 
     local source_dir = extracted_dir
-    local needs_cleanup = true
 
     -- Create bin directory
     os.execute("mkdir -p " .. shell_escape(path .. "/bin"))
@@ -72,10 +74,8 @@ function PLUGIN:PostInstall(ctx)
     -- Make pg_format executable
     os.execute("chmod +x " .. shell_escape(path .. "/bin/pg_format"))
 
-    -- Clean up the extracted directory if needed
-    if needs_cleanup then
-        os.execute("rm -rf " .. shell_escape(source_dir))
-    end
+    -- Clean up the extracted directory (always needed after extraction)
+    os.execute("rm -rf " .. shell_escape(source_dir))
 
     -- Verify installation works
     local testResult = os.execute(shell_escape(path .. "/bin/pg_format") .. " --version > /dev/null 2>&1")
