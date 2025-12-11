@@ -16,20 +16,20 @@ pgFormatter is a PostgreSQL SQL syntax beautifier that can work as a console pro
 ### Install the plugin
 
 ```bash
-mise plugin install pg_format https://github.com/sechmann/mise-pgFormatter
+mise plugin install pg-format https://github.com/sechmann/mise-pgFormatter
 ```
 
 ### Install pgFormatter
 
 ```bash
 # Install the latest version
-mise install pg_format@latest
+mise install pg-format@latest
 
 # Install a specific version
-mise install pg_format@5.8
+mise install pg-format@5.8
 
 # Set as global default
-mise use -g pg_format@latest
+mise use -g pg-format@latest
 ```
 
 ## Usage
@@ -59,8 +59,8 @@ For more options and usage details, see the [pgFormatter documentation](https://
 1. Clone this repository
 2. Link the plugin for local development:
 ```bash
-mise plugin link --force pg_format .
-mise install pg_format@5.8
+mise plugin link --force pg-format .
+mise install pg-format@5.8
 ```
 
 3. Run tests:

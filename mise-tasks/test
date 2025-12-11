@@ -2,12 +2,12 @@
 #MISE description="Run plugin tests - install and execute tool"
 set -euo pipefail
 
-mise plugin link --force pg_format .
+mise plugin link --force pg-format .
 mise cache clear
-mise install pg_format@5.8
+mise install pg-format@5.8
 
 # Capture and display the output while also verifying it
-output=$(mise exec "pg_format@5.8" -- pg_format --version)
+output=$(mise exec "pg-format@5.8" -- pg_format --version)
 echo "pg_format output: $output"
 
 if echo "$output" | grep -q '5.8'; then
