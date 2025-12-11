@@ -72,8 +72,8 @@ function PLUGIN:PostInstall(ctx)
     -- Create bin directory
     os.execute("mkdir -p " .. shell_escape(path .. "/bin"))
 
-    -- Move pg_format script to bin/
-    local move_result = os.execute("mv " .. shell_escape(source_dir .. "/pg_format") .. " " .. shell_escape(path .. "/bin/pg_format"))
+    -- Move pg_format script to bin/ with a different name
+    local move_result = os.execute("mv " .. shell_escape(source_dir .. "/pg_format") .. " " .. shell_escape(path .. "/bin/pg_format.pl"))
     if move_result ~= 0 then
         error("Failed to move pg_format script to bin")
     end
@@ -84,15 +84,33 @@ function PLUGIN:PostInstall(ctx)
         error("Failed to move lib directory")
     end
 
-    -- Make pg_format executable
+    -- Create a wrapper script that sets PERL5LIB before running pg_format
+    local wrapper_content = [[#!/bin/sh
+# Wrapper script for pg_format that sets up the Perl library path
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+export PERL5LIB="$SCRIPT_DIR/lib:$PERL5LIB"
+exec "$SCRIPT_DIR/bin/pg_format.pl" "$@"
+]]
+    local wrapper_file = io.open(path .. "/bin/pg_format", "w")
+    if not wrapper_file then
+        error("Failed to create wrapper script")
+    end
+    wrapper_file:write(wrapper_content)
+    wrapper_file:close()
+
+    -- Make both scripts executable
+    os.execute("chmod +x " .. shell_escape(path .. "/bin/pg_format.pl"))
     os.execute("chmod +x " .. shell_escape(path .. "/bin/pg_format"))
 
     -- Clean up the extracted directory (always needed after extraction)
     os.execute("rm -rf " .. shell_escape(source_dir))
 
     -- Verify installation works
-    local testResult = os.execute(shell_escape(path .. "/bin/pg_format") .. " --version > /dev/null 2>&1")
-    if testResult ~= 0 then
-        error("pg_format installation appears to be broken")
+    local test_handle = io.popen(shell_escape(path .. "/bin/pg_format") .. " --version 2>&1")
+    local test_output = test_handle:read("*a")
+    local success = test_handle:close()
+    
+    if not success then
+        error("pg_format installation appears to be broken. Test output:\n" .. test_output)
     end
 end
