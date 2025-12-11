@@ -6,12 +6,8 @@ function PLUGIN:Available(ctx)
     local http = require("http")
     local json = require("json")
 
-    -- Example 1: GitHub Tags API (most common)
-    -- Replace <GITHUB_USER>/<GITHUB_REPO> with your tool's repository
-    local repo_url = "https://api.github.com/repos/<GITHUB_USER>/<GITHUB_REPO>/tags"
-
-    -- Example 2: GitHub Releases API (for tools that use GitHub releases)
-    -- local repo_url = "https://api.github.com/repos/<GITHUB_USER>/<GITHUB_REPO>/releases"
+    -- Use GitHub Tags API for pgFormatter
+    local repo_url = "https://api.github.com/repos/darold/pgFormatter/tags"
 
     -- mise automatically handles GitHub authentication - no manual token setup needed
     local resp, err = http.get({
@@ -28,22 +24,16 @@ function PLUGIN:Available(ctx)
     local tags = json.decode(resp.body)
     local result = {}
 
-    -- Process tags/releases
+    -- Process tags - pgFormatter uses tags like v5.8, v5.7, etc.
     for _, tag_info in ipairs(tags) do
         local version = tag_info.name
 
-        -- Clean up version string (remove 'v' prefix if present)
-        -- version = version:gsub("^v", "")
-
-        -- For releases API, you might want:
-        -- local version = tag_info.tag_name:gsub("^v", "")
-        -- local is_prerelease = tag_info.prerelease or false
-        -- local note = is_prerelease and "pre-release" or nil
+        -- Remove 'v' prefix from version string (v5.8 -> 5.8)
+        version = version:gsub("^v", "")
 
         table.insert(result, {
             version = version,
-            note = nil, -- Optional: "latest", "lts", "pre-release", etc.
-            -- addition = {} -- Optional: additional tools/components
+            note = nil,
         })
     end
 
