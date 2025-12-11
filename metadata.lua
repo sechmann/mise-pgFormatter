@@ -4,7 +4,7 @@
 
 PLUGIN = { -- luacheck: ignore
     -- Required: Tool name (lowercase, no spaces)
-    name = "pg_format",
+    name = "pg-format",
 
     -- Required: Plugin version (not the tool version)
     version = "1.0.0",
