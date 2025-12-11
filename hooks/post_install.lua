@@ -16,7 +16,7 @@ end
 function PLUGIN:PostInstall(ctx)
     local sdkInfo = ctx.sdkInfo[PLUGIN.name]
     local path = sdkInfo.path
-    local version = ctx.version
+    local version = sdkInfo.version
 
     -- mise downloads the tarball but doesn't extract it automatically
     -- The downloaded file is named "v{version}" based on the GitHub API tag reference
