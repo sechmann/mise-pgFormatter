@@ -26,7 +26,8 @@ function PLUGIN:PostInstall(ctx)
     local needs_cleanup = false
 
     -- If not in root, look for the wrapper directory
-    if pg_format_in_root ~= 0 or lib_in_root ~= 0 then
+    -- Both files must be missing to search for wrapper (using AND logic)
+    if pg_format_in_root ~= 0 and lib_in_root ~= 0 then
         local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
         local handle = io.popen(find_cmd)
         local extracted_dir = handle:read("*l")
