@@ -16,62 +16,57 @@ end
 function PLUGIN:PostInstall(ctx)
     local sdkInfo = ctx.sdkInfo[PLUGIN.name]
     local path = sdkInfo.path
+    local version = ctx.version
 
-    -- pgFormatter is extracted from GitHub tarball
-    -- mise may extract it in different ways:
-    -- 1. With wrapper directory: path/darold-pgFormatter-<sha>/pg_format
-    -- 2. Without wrapper (stripped): path/pg_format
-    -- We need to handle both cases
+    -- mise downloads the tarball but doesn't extract it automatically
+    -- The downloaded file is named after the version (e.g., "v5.8")
+    -- We need to extract it manually
+    local tarball_path = path .. "/v" .. version
 
-    -- First, check if files are already in the root (mise stripped the wrapper)
-    local pg_format_in_root = path_exists(path .. "/pg_format")
-    local lib_in_root = path_exists(path .. "/lib")
-
-    local source_dir = path
-    local needs_cleanup = false
-
-    -- If not in root, look for the wrapper directory
-    -- Both files must be missing to search for wrapper (using AND logic)
-    if not pg_format_in_root and not lib_in_root then
-        local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
-        local handle = io.popen(find_cmd)
-        local extracted_dir = handle:read("*l")
-        handle:close()
-
-        if extracted_dir and extracted_dir ~= "" then
-            source_dir = extracted_dir
-            needs_cleanup = true
-        else
-            -- Try to list what's actually in the directory for debugging
-            local ls_handle = io.popen("ls -la " .. shell_escape(path))
-            local ls_output = ls_handle:read("*a")
-            ls_handle:close()
-            error("Failed to find extracted pgFormatter directory. Contents of " .. path .. ":\n" .. ls_output)
+    -- Check if the tarball file exists
+    if path_exists(tarball_path) then
+        -- Extract the tarball
+        local extract_cmd = "tar -xzf " .. shell_escape(tarball_path) .. " -C " .. shell_escape(path)
+        local extract_result = os.execute(extract_cmd)
+        if extract_result ~= 0 then
+            error("Failed to extract tarball: " .. tarball_path)
         end
+
+        -- Remove the tarball after extraction
+        os.execute("rm " .. shell_escape(tarball_path))
     end
+
+    -- Now find the extracted directory
+    -- GitHub tarballs extract to a directory like darold-pgFormatter-<sha>
+    local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
+    local handle = io.popen(find_cmd)
+    local extracted_dir = handle:read("*l")
+    handle:close()
+
+    if not extracted_dir or extracted_dir == "" then
+        -- Try to list what's actually in the directory for debugging
+        local ls_handle = io.popen("ls -la " .. shell_escape(path))
+        local ls_output = ls_handle:read("*a")
+        ls_handle:close()
+        error("Failed to find extracted pgFormatter directory. Contents of " .. path .. ":\n" .. ls_output)
+    end
+
+    local source_dir = extracted_dir
+    local needs_cleanup = true
 
     -- Create bin directory
     os.execute("mkdir -p " .. shell_escape(path .. "/bin"))
 
-    -- Move or copy pg_format script to bin/
-    if source_dir ~= path then
-        local move_result = os.execute("mv " .. shell_escape(source_dir .. "/pg_format") .. " " .. shell_escape(path .. "/bin/pg_format"))
-        if move_result ~= 0 then
-            error("Failed to move pg_format script to bin")
-        end
+    -- Move pg_format script to bin/
+    local move_result = os.execute("mv " .. shell_escape(source_dir .. "/pg_format") .. " " .. shell_escape(path .. "/bin/pg_format"))
+    if move_result ~= 0 then
+        error("Failed to move pg_format script to bin")
+    end
 
-        -- Move lib directory (contains Perl modules needed by pg_format)
-        local move_lib_result = os.execute("mv " .. shell_escape(source_dir .. "/lib") .. " " .. shell_escape(path .. "/lib"))
-        if move_lib_result ~= 0 then
-            error("Failed to move lib directory")
-        end
-    else
-        -- Files are already in root, just move pg_format to bin/
-        local move_result = os.execute("mv " .. shell_escape(path .. "/pg_format") .. " " .. shell_escape(path .. "/bin/pg_format"))
-        if move_result ~= 0 then
-            error("Failed to move pg_format script to bin")
-        end
-        -- lib is already in the right place
+    -- Move lib directory (contains Perl modules needed by pg_format)
+    local move_lib_result = os.execute("mv " .. shell_escape(source_dir .. "/lib") .. " " .. shell_escape(path .. "/lib"))
+    if move_lib_result ~= 0 then
+        error("Failed to move lib directory")
     end
 
     -- Make pg_format executable
