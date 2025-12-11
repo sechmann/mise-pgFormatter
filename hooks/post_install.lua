@@ -13,6 +13,19 @@ local function path_exists(filepath)
     return os.execute("test -e " .. shell_escape(filepath)) == 0
 end
 
+-- Helper function to find the extracted pgFormatter directory
+local function find_extracted_dir(path)
+    local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
+    local handle = io.popen(find_cmd)
+    local extracted_dir = handle:read("*l")
+    handle:close()
+    
+    if extracted_dir and extracted_dir ~= "" then
+        return extracted_dir
+    end
+    return nil
+end
+
 function PLUGIN:PostInstall(ctx)
     local sdkInfo = ctx.sdkInfo[PLUGIN.name]
     local path = sdkInfo.path
@@ -25,12 +38,9 @@ function PLUGIN:PostInstall(ctx)
     -- Check if tarball file exists (it should)
     if not path_exists(tarball_path) then
         -- Maybe it's already been extracted? Check for extracted directory
-        local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
-        local handle = io.popen(find_cmd)
-        local extracted_dir = handle:read("*l")
-        handle:close()
+        local extracted_dir = find_extracted_dir(path)
         
-        if not extracted_dir or extracted_dir == "" then
+        if not extracted_dir then
             local ls_handle = io.popen("ls -la " .. shell_escape(path))
             local ls_output = ls_handle:read("*a")
             ls_handle:close()
@@ -43,17 +53,14 @@ function PLUGIN:PostInstall(ctx)
             error("Failed to extract tarball: " .. tarball_path)
         end
 
-        -- Remove the tarball after extraction
+        -- Remove the tarball after extraction (best effort, not critical if it fails)
         os.execute("rm " .. shell_escape(tarball_path))
     end
 
     -- Now find the extracted directory (darold-pgFormatter-*)
-    local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
-    local handle = io.popen(find_cmd)
-    local extracted_dir = handle:read("*l")
-    handle:close()
+    local extracted_dir = find_extracted_dir(path)
 
-    if not extracted_dir or extracted_dir == "" then
+    if not extracted_dir then
         local ls_handle = io.popen("ls -la " .. shell_escape(path))
         local ls_output = ls_handle:read("*a")
         ls_handle:close()
