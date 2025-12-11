@@ -2,74 +2,56 @@
 -- Performs additional setup after installation
 -- Documentation: https://mise.jdx.dev/tool-plugin-development.html#postinstall-hook
 
-function PLUGIN:PostInstall(ctx)
-    -- Available context:
-    -- ctx.rootPath - Root installation path
-    -- ctx.runtimeVersion - Full version string
-    -- ctx.sdkInfo[PLUGIN.name] - SDK information
+-- Helper function to escape shell arguments
+local function shell_escape(arg)
+    -- Escape single quotes by replacing ' with '\''
+    return "'" .. arg:gsub("'", "'\\''") .. "'"
+end
 
+function PLUGIN:PostInstall(ctx)
     local sdkInfo = ctx.sdkInfo[PLUGIN.name]
     local path = sdkInfo.path
-    -- local version = sdkInfo.version
 
-    -- Example 1: Single binary file (most common)
-    -- The file is downloaded directly, move it to bin/ and make executable
-    os.execute("mkdir -p " .. path .. "/bin")
+    -- pgFormatter is extracted from GitHub tarball
+    -- The tarball extracts to a directory like darold-pgFormatter-<sha>/
+    -- This is GitHub's standard tarball extraction format: {owner}-{repo}-{sha}
+    -- We need to find this directory and set up the structure
 
-    local srcFile = path .. "/" .. PLUGIN.name
-    local destFile = path .. "/bin/" .. PLUGIN.name
+    -- Create bin directory
+    os.execute("mkdir -p " .. shell_escape(path .. "/bin"))
 
-    -- Move and make executable
-    local result = os.execute("mv " .. srcFile .. " " .. destFile .. " && chmod +x " .. destFile)
-    if result ~= 0 then
-        error("Failed to install " .. PLUGIN.name .. " binary")
+    -- Find the extracted directory (will be darold-pgFormatter-*)
+    -- Note: This pattern is based on GitHub's standard tarball extraction format
+    local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
+    local handle = io.popen(find_cmd)
+    local extracted_dir = handle:read("*l")
+    handle:close()
+
+    if not extracted_dir or extracted_dir == "" then
+        error("Failed to find extracted pgFormatter directory")
     end
+
+    -- Move pg_format script to bin/
+    local move_result = os.execute("mv " .. shell_escape(extracted_dir .. "/pg_format") .. " " .. shell_escape(path .. "/bin/pg_format"))
+    if move_result ~= 0 then
+        error("Failed to move pg_format script")
+    end
+
+    -- Make pg_format executable
+    os.execute("chmod +x " .. shell_escape(path .. "/bin/pg_format"))
+
+    -- Move lib directory (contains Perl modules needed by pg_format)
+    local move_lib_result = os.execute("mv " .. shell_escape(extracted_dir .. "/lib") .. " " .. shell_escape(path .. "/lib"))
+    if move_lib_result ~= 0 then
+        error("Failed to move lib directory")
+    end
+
+    -- Clean up the extracted directory
+    os.execute("rm -rf " .. shell_escape(extracted_dir))
 
     -- Verify installation works
-    local testResult = os.execute(destFile .. " --version > /dev/null 2>&1")
+    local testResult = os.execute(shell_escape(path .. "/bin/pg_format") .. " --version > /dev/null 2>&1")
     if testResult ~= 0 then
-        error(PLUGIN.name .. " installation appears to be broken")
+        error("pg_format installation appears to be broken")
     end
-
-    -- Example 2: Archive already extracted by mise
-    -- If pre_install returns a .tar.gz or .zip, mise extracts it automatically
-    -- You might just need to move files around:
-    --[[
-    os.execute("mkdir -p " .. path .. "/bin")
-    os.execute("mv " .. path .. "/<TOOL>-*/bin/* " .. path .. "/bin/")
-    os.execute("chmod +x " .. path .. "/bin/*")
-    --]]
-
-    -- Example 3: Multiple binaries
-    --[[
-    os.execute("mkdir -p " .. path .. "/bin")
-    local binaries = {"tool1", "tool2", "tool3"}
-    for _, binary in ipairs(binaries) do
-        os.execute("mv " .. path .. "/" .. binary .. " " .. path .. "/bin/")
-        os.execute("chmod +x " .. path .. "/bin/" .. binary)
-    end
-    --]]
-
-    -- Example 4: No action needed
-    -- If the archive already has the correct structure (bin/ directory),
-    -- you might not need to do anything:
-    --[[
-    -- Archive already contains bin/<TOOL>, just verify it works
-    local testResult = os.execute(path .. "/bin/<TOOL> --version > /dev/null 2>&1")
-    if testResult ~= 0 then
-        error("<TOOL> installation appears to be broken")
-    end
-    --]]
-
-    -- Example 5: Platform-specific setup
-    --[[
-    -- RUNTIME object is provided by mise/vfox
-    if RUNTIME.osType ~= "Windows" then
-        -- Unix-like systems: make binaries executable
-        os.execute("chmod +x " .. path .. "/bin/*")
-    else
-        -- Windows-specific setup if needed
-        -- e.g., adding .exe extension or handling batch files
-    end
-    --]]
 end
