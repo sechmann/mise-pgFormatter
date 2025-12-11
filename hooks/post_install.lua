@@ -16,24 +16,48 @@ end
 function PLUGIN:PostInstall(ctx)
     local sdkInfo = ctx.sdkInfo[PLUGIN.name]
     local path = sdkInfo.path
+    local version = sdkInfo.version
 
-    -- mise extracts the GitHub tarball automatically to the install path
-    -- The tarball extracts to a directory like darold-pgFormatter-<sha>
-    -- We need to find this directory and reorganize the files
+    -- Despite mise saying "Extracting...", it only moves the tarball file to the install directory
+    -- We need to manually extract it here
+    local tarball_path = path .. "/v" .. version
 
-    -- First, check what's in the directory for debugging
-    local ls_handle = io.popen("ls -la " .. shell_escape(path))
-    local ls_output = ls_handle:read("*a")
-    ls_handle:close()
+    -- Check if tarball file exists (it should)
+    if not path_exists(tarball_path) then
+        -- Maybe it's already been extracted? Check for extracted directory
+        local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
+        local handle = io.popen(find_cmd)
+        local extracted_dir = handle:read("*l")
+        handle:close()
+        
+        if not extracted_dir or extracted_dir == "" then
+            local ls_handle = io.popen("ls -la " .. shell_escape(path))
+            local ls_output = ls_handle:read("*a")
+            ls_handle:close()
+            error("Neither tarball nor extracted directory found. Contents of " .. path .. ":\n" .. ls_output)
+        end
+    else
+        -- Extract the tarball
+        local extract_result = os.execute("tar -xzf " .. shell_escape(tarball_path) .. " -C " .. shell_escape(path))
+        if extract_result ~= 0 then
+            error("Failed to extract tarball: " .. tarball_path)
+        end
 
-    -- Find the extracted directory (darold-pgFormatter-*)
+        -- Remove the tarball after extraction
+        os.execute("rm " .. shell_escape(tarball_path))
+    end
+
+    -- Now find the extracted directory (darold-pgFormatter-*)
     local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
     local handle = io.popen(find_cmd)
     local extracted_dir = handle:read("*l")
     handle:close()
 
     if not extracted_dir or extracted_dir == "" then
-        error("Failed to find extracted pgFormatter directory. Contents of " .. path .. ":\n" .. ls_output)
+        local ls_handle = io.popen("ls -la " .. shell_escape(path))
+        local ls_output = ls_handle:read("*a")
+        ls_handle:close()
+        error("Failed to find extracted pgFormatter directory after extraction. Contents of " .. path .. ":\n" .. ls_output)
     end
 
     local source_dir = extracted_dir
