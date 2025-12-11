@@ -87,7 +87,12 @@ function PLUGIN:PostInstall(ctx)
     -- Create a wrapper script that sets PERL5LIB before running pg_format
     local wrapper_content = [[#!/bin/sh
 # Wrapper script for pg_format that sets up the Perl library path
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Resolve the actual script directory, handling symlinks
+SCRIPT="$0"
+while [ -L "$SCRIPT" ]; do
+    SCRIPT="$(readlink "$SCRIPT")"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
 export PERL5LIB="$SCRIPT_DIR/lib:$PERL5LIB"
 exec "$SCRIPT_DIR/bin/pg_format.pl" "$@"
 ]]
@@ -108,7 +113,11 @@ exec "$SCRIPT_DIR/bin/pg_format.pl" "$@"
     -- Verify installation works
     local test_handle = io.popen(shell_escape(path .. "/bin/pg_format") .. " --version 2>&1")
     local test_output = test_handle:read("*a")
-    local success = test_handle:close()
+    local exit_code = test_handle:close()
+    
+    -- Check exit code (compatible with both Lua 5.1 and 5.2+)
+    -- In Lua 5.1, close() returns true/false. In 5.2+, returns exit code
+    local success = (type(exit_code) == "boolean" and exit_code) or (type(exit_code) == "number" and exit_code == 0)
     
     if not success then
         error("pg_format installation appears to be broken. Test output:\n" .. test_output)
