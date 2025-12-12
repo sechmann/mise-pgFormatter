@@ -8,50 +8,118 @@ local function shell_escape(arg)
     return "'" .. arg:gsub("'", "'\\''") .. "'"
 end
 
-function PLUGIN:PostInstall(ctx)
-    local sdkInfo = ctx.sdkInfo[PLUGIN.name]
-    local path = sdkInfo.path
+-- Helper function to check if a file or directory exists
+local function path_exists(filepath)
+    return os.execute("test -e " .. shell_escape(filepath)) == 0
+end
 
-    -- pgFormatter is extracted from GitHub tarball
-    -- The tarball extracts to a directory like darold-pgFormatter-<sha>/
-    -- This is GitHub's standard tarball extraction format: {owner}-{repo}-{sha}
-    -- We need to find this directory and set up the structure
-
-    -- Create bin directory
-    os.execute("mkdir -p " .. shell_escape(path .. "/bin"))
-
-    -- Find the extracted directory (will be darold-pgFormatter-*)
-    -- Note: This pattern is based on GitHub's standard tarball extraction format
+-- Helper function to find the extracted pgFormatter directory
+local function find_extracted_dir(path)
     local find_cmd = "find " .. shell_escape(path) .. " -maxdepth 1 -type d -name 'darold-pgFormatter-*' | head -1"
     local handle = io.popen(find_cmd)
     local extracted_dir = handle:read("*l")
     handle:close()
+    
+    if extracted_dir and extracted_dir ~= "" then
+        return extracted_dir
+    end
+    return nil
+end
 
-    if not extracted_dir or extracted_dir == "" then
-        error("Failed to find extracted pgFormatter directory")
+function PLUGIN:PostInstall(ctx)
+    local sdkInfo = ctx.sdkInfo[PLUGIN.name]
+    local path = sdkInfo.path
+    local version = sdkInfo.version
+
+    -- Despite mise saying "Extracting...", it only moves the tarball file to the install directory
+    -- We need to manually extract it here
+    local tarball_path = path .. "/v" .. version
+
+    -- Check if tarball file exists (it should)
+    if not path_exists(tarball_path) then
+        -- Maybe it's already been extracted? Check for extracted directory
+        local extracted_dir = find_extracted_dir(path)
+        
+        if not extracted_dir then
+            local ls_handle = io.popen("ls -la " .. shell_escape(path))
+            local ls_output = ls_handle:read("*a")
+            ls_handle:close()
+            error("Neither tarball nor extracted directory found. Contents of " .. path .. ":\n" .. ls_output)
+        end
+    else
+        -- Extract the tarball
+        local extract_result = os.execute("tar -xzf " .. shell_escape(tarball_path) .. " -C " .. shell_escape(path))
+        if extract_result ~= 0 then
+            error("Failed to extract tarball: " .. tarball_path)
+        end
+
+        -- Remove the tarball after extraction (best effort, not critical if it fails)
+        os.execute("rm " .. shell_escape(tarball_path))
     end
 
-    -- Move pg_format script to bin/
-    local move_result = os.execute("mv " .. shell_escape(extracted_dir .. "/pg_format") .. " " .. shell_escape(path .. "/bin/pg_format"))
+    -- Now find the extracted directory (darold-pgFormatter-*)
+    local extracted_dir = find_extracted_dir(path)
+
+    if not extracted_dir then
+        local ls_handle = io.popen("ls -la " .. shell_escape(path))
+        local ls_output = ls_handle:read("*a")
+        ls_handle:close()
+        error("Failed to find extracted pgFormatter directory after extraction. Contents of " .. path .. ":\n" .. ls_output)
+    end
+
+    local source_dir = extracted_dir
+
+    -- Create bin directory
+    os.execute("mkdir -p " .. shell_escape(path .. "/bin"))
+
+    -- Move pg_format script to bin/ with a different name
+    local move_result = os.execute("mv " .. shell_escape(source_dir .. "/pg_format") .. " " .. shell_escape(path .. "/bin/pg_format.pl"))
     if move_result ~= 0 then
-        error("Failed to move pg_format script")
+        error("Failed to move pg_format script to bin")
     end
-
-    -- Make pg_format executable
-    os.execute("chmod +x " .. shell_escape(path .. "/bin/pg_format"))
 
     -- Move lib directory (contains Perl modules needed by pg_format)
-    local move_lib_result = os.execute("mv " .. shell_escape(extracted_dir .. "/lib") .. " " .. shell_escape(path .. "/lib"))
+    local move_lib_result = os.execute("mv " .. shell_escape(source_dir .. "/lib") .. " " .. shell_escape(path .. "/lib"))
     if move_lib_result ~= 0 then
         error("Failed to move lib directory")
     end
 
-    -- Clean up the extracted directory
-    os.execute("rm -rf " .. shell_escape(extracted_dir))
+    -- Create a wrapper script that sets PERL5LIB before running pg_format
+    local wrapper_content = [[#!/bin/sh
+# Wrapper script for pg_format that sets up the Perl library path
+# Resolve the actual script directory, handling symlinks
+SCRIPT="$0"
+while [ -L "$SCRIPT" ]; do
+    SCRIPT="$(readlink "$SCRIPT")"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
+export PERL5LIB="$SCRIPT_DIR/lib:$PERL5LIB"
+exec "$SCRIPT_DIR/bin/pg_format.pl" "$@"
+]]
+    local wrapper_file = io.open(path .. "/bin/pg_format", "w")
+    if not wrapper_file then
+        error("Failed to create wrapper script")
+    end
+    wrapper_file:write(wrapper_content)
+    wrapper_file:close()
+
+    -- Make both scripts executable
+    os.execute("chmod +x " .. shell_escape(path .. "/bin/pg_format.pl"))
+    os.execute("chmod +x " .. shell_escape(path .. "/bin/pg_format"))
+
+    -- Clean up the extracted directory (always needed after extraction)
+    os.execute("rm -rf " .. shell_escape(source_dir))
 
     -- Verify installation works
-    local testResult = os.execute(shell_escape(path .. "/bin/pg_format") .. " --version > /dev/null 2>&1")
-    if testResult ~= 0 then
-        error("pg_format installation appears to be broken")
+    local test_handle = io.popen(shell_escape(path .. "/bin/pg_format") .. " --version 2>&1")
+    local test_output = test_handle:read("*a")
+    local exit_code = test_handle:close()
+    
+    -- Check exit code (compatible with both Lua 5.1 and 5.2+)
+    -- In Lua 5.1, close() returns true/false. In 5.2+, returns exit code
+    local success = (type(exit_code) == "boolean" and exit_code) or (type(exit_code) == "number" and exit_code == 0)
+    
+    if not success then
+        error("pg_format installation appears to be broken. Test output:\n" .. test_output)
     end
 end
